@@ -18,18 +18,38 @@ with st.expander("Configurações iniciais (preencher apenas uma vez)"):
 st.subheader("Novo Plantão")
 data = st.date_input("Data do plantão")
 horas = st.number_input("Quantidade de horas trabalhadas")
+horario = st.text_input("Horário do plantão (ex: 07h - 13h)")
+local = st.selectbox("Local de trabalho", ["Ambulatório", "Centro Cirúrgico", "Diarismo"])
+
 if st.button("Registrar plantão"):
-    st.session_state.registros.append({"Data": data, "Horas": horas})
+    st.session_state.registros.append({
+        "Data": data,
+        "Horário": horario,
+        "Horas": horas,
+        "Local": local
+    })
     st.success("Plantão registrado com sucesso!")
 
 # Exibir registros
 if st.session_state.registros:
-    st.subheader("Registros do mês")
+    st.subheader("Relatório final do mês")
     df = pd.DataFrame(st.session_state.registros)
     df["Valor (R$)"] = df["Horas"] * valor_hora
-    st.dataframe(df)
 
-    total_valor = df["Valor (R$)"].sum()
-    st.markdown(f"**Total do mês (sem produtividade):** R$ {total_valor:.2f}")
-    st.markdown(f"**Produtividade:** R$ {produtividade:.2f}")
-    st.markdown(f"**Total geral:** R$ {total_valor + produtividade:.2f}")
+    total_geral = 0
+    for local_trabalho in df["Local"].unique():
+        st.markdown(f"### {local_trabalho}")
+        df_local = df[df["Local"] == local_trabalho]
+        total_local = df_local["Horas"].sum()
+        valor_local = df_local["Valor (R$)"].sum()
+        for _, row in df_local.iterrows():
+            data_str = row["Data"].strftime("%d/%m/%Y")
+            st.markdown(f"{data_str} ({row['Horário']}) - {int(row['Horas'])}h")
+        st.markdown(f"**Total: {int(total_local)} horas**")
+        st.markdown(f"**Valor: {int(total_local)} X R$ {valor_hora:.2f} = R$ {valor_local:,.2f}**")
+        total_geral += valor_local
+
+    st.markdown("---")
+    st.markdown(f"**Valor total (sem produtividade): R$ {total_geral:,.2f}**")
+    st.markdown(f"**Produtividade: R$ {produtividade:,.2f}**")
+    st.markdown(f"**Valor final: R$ {total_geral + produtividade:,.2f}**")
