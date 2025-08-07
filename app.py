@@ -38,4 +38,4 @@ if st.session_state.registros:
     st.markdown(f"**Total de horas:** {total_horas} h")
     st.markdown(f"**Total recebido com plantões:** R$ {total_valor:.2f}")
     st.markdown(f"**Produtividade mensal:** R$ {produtividade:.2f}")
-    st.markdown(f"**Total geral:** R$ {total_valor + produtividade:.2f}")|
+    st.markdown(f"**Total geral:** R$ {total_valor + produtividade:.2f}")
