@@ -1,84 +1,78 @@
 import streamlit as st
 import pandas as pd
-from docx import Document
-from io import BytesIO
-from datetime import datetime
 
-st.set_page_config(page_title="Registro de Plantões", layout="centered")
+st.set_page_config(page_title="Relatório de Cirurgias", layout="centered")
 
-st.title("Registro de Plantões Médicos")
+st.title("Registro de Cirurgias")
 
 # Campos de entrada
-nome = st.text_input("Nome do médico")
-data = st.date_input("Data do plantão", format="DD/MM/YYYY")
-local = st.selectbox("Local do plantão", ["Ambulatório", "Centro Cirúrgico", "Diarismo"])
-horario = st.selectbox("Horário do plantão", ["7:00 - 19:00", "19:00 - 7:00", "7:00 - 13:00", "13:00 - 19:00"])
+nome_medico = st.text_input("Nome do médico")
 
-# Iniciar ou carregar lista da sessão
-if "plantoes" not in st.session_state:
-    st.session_state.plantoes = []
+# Inicializa o estado da sessão se não existir
+if "cirurgias" not in st.session_state:
+    st.session_state.cirurgias = []
 
-# Botão de adicionar plantão
-if st.button("Adicionar plantão"):
-    if nome.strip() == "":
-        st.warning("Digite o nome do médico.")
-    else:
-        st.session_state.plantoes.append({
-            "Data": data.strftime("%d/%m/%Y"),
-            "Local": local,
-            "Horário": horario,
-            "Nome": nome.strip()
+# Formulário para adicionar cirurgia
+with st.form(key="form_cirurgia"):
+    data = st.date_input("Data")
+    local = st.selectbox("Local", ["Ambulatório", "Centro Cirúrgico", "Diarismo"])
+    horario = st.selectbox("Horário", [
+        "07:00 - 19:00",
+        "19:00 - 07:00",
+        "07:00 - 13:00",
+        "13:00 - 19:00"
+    ])
+    horas = st.number_input("Quantidade de horas", min_value=1, max_value=24, step=1)
+    valor_hora = st.number_input("Valor da hora (R$)", min_value=0.0, step=10.0, value=100.0)
+    adicionar = st.form_submit_button("Adicionar plantão")
+
+    if adicionar:
+        st.session_state.cirurgias.append({
+            "data": data.strftime("%d/%m/%Y"),
+            "local": local,
+            "horario": horario,
+            "horas": horas,
+            "valor_hora": valor_hora
         })
 
-# Mostrar plantões adicionados com opção de remover
-if st.session_state.plantoes:
-    st.subheader("Plantões Registrados")
-    for i, plantao in enumerate(st.session_state.plantoes):
-        col1, col2 = st.columns([5, 1])
+# Exibir tabela com botão de excluir
+if st.session_state.cirurgias:
+    st.subheader("Plantões registrados")
+    for i, cirurgia in enumerate(st.session_state.cirurgias):
+        col1, col2 = st.columns([10, 1])
         with col1:
-            st.markdown(f"📅 **{plantao['Data']}** | 🏥 {plantao['Local']} | ⏰ {plantao['Horário']} | 👨‍⚕️ {plantao['Nome']}")
+            st.write(
+                f"📅 **{cirurgia['data']}** | 🏥 {cirurgia['local']} | 🕒 {cirurgia['horario']} "
+                f"| ⏱️ {cirurgia['horas']}h | 💰 R$ {cirurgia['valor_hora']}/h"
+            )
         with col2:
-            if st.button("❌", key=f"delete_{i}"):
-                st.session_state.plantoes.pop(i)
+            if st.button("❌", key=f"del_{i}"):
+                st.session_state.cirurgias.pop(i)
                 st.experimental_rerun()
 
-# Função para gerar o DOCX
-def gerar_relatorio(plantoes):
-    doc = Document()
+# Gerar relatório
+if nome_medico and st.session_state.cirurgias:
+    if st.button("Gerar relatório"):
+        df = pd.DataFrame(st.session_state.cirurgias)
 
-    doc.add_heading(f"Relatório de Plantões – {plantoes[0]['Nome']}", level=1)
+        st.subheader("📄 Relatório final (copiar e colar no Word ou WhatsApp)")
 
-    locais = ["Ambulatório", "Centro Cirúrgico", "Diarismo"]
-    total_geral = 0
+        relatorio = f"Relatório de plantões do Dr. {nome_medico}\n\n"
 
-    for local in locais:
-        doc.add_heading(f"{local}", level=2)
-        total_horas = 0
-        for p in plantoes:
-            if p["Local"] == local:
-                doc.add_paragraph(f"{p['Data']} - {p['Horário']} ({p['Nome']})")
-                h_inicio, h_fim = p["Horário"].split(" - ")
-                h_inicio = datetime.strptime(h_inicio, "%H:%M")
-                h_fim = datetime.strptime(h_fim, "%H:%M")
-                horas = (h_fim - h_inicio).seconds // 3600 if h_fim > h_inicio else ((h_fim + pd.Timedelta(days=1)) - h_inicio).seconds // 3600
-                total_horas += horas
-        doc.add_paragraph(f"Total de horas: {total_horas}h")
-        total_geral += total_horas
+        total_geral = 0
+        for local in df["local"].unique():
+            relatorio += f"Local: {local}\n"
+            df_local = df[df["local"] == local]
+            for _, row in df_local.iterrows():
+                valor_total = row["horas"] * row["valor_hora"]
+                relatorio += (
+                    f"- {row['data']} ({row['horario']}) — {row['horas']}h "
+                    f"x R$ {row['valor_hora']:.2f}/h = R$ {valor_total:.2f}\n"
+                )
+            subtotal = (df_local["horas"] * df_local["valor_hora"]).sum()
+            relatorio += f"Subtotal {local}: R$ {subtotal:.2f}\n\n"
+            total_geral += subtotal
 
-    doc.add_paragraph(f"\nTotal geral de horas: {total_geral}h")
+        relatorio += f"Total geral: R$ {total_geral:.2f}"
 
-    buffer = BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
-
-# Botão para gerar relatório final
-if st.session_state.plantoes:
-    if st.button("📄 Gerar Relatório Word"):
-        docx_file = gerar_relatorio(st.session_state.plantoes)
-        st.download_button(
-            label="📥 Baixar Relatório .docx",
-            data=docx_file,
-            file_name="relatorio_plantoes.docx",
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
+        st.text_area("Copie abaixo:", relatorio, height=400)
