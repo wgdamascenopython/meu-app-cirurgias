@@ -1,56 +1,92 @@
-import streamlit as st import pandas as pd from io import StringIO from datetime import datetime
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+from io import BytesIO
+from docx import Document
 
-st.set_page_config(page_title="Registro de Cirurgias", layout="centered") st.title("Registro de Cirurgias")
+st.title("Registro de Cirurgias")
 
-Inicializar dados na sessão
+# Inicializar registros
+if "registros" not in st.session_state:
+    st.session_state.registros = []
 
-if "registros" not in st.session_state: st.session_state.registros = []
+# Configuração fixa (preenchida uma vez)
+with st.expander("Configurações iniciais (preencher uma vez)"):
+    nome = st.text_input("Nome do cirurgião", key="nome")
+    hospital = st.text_input("Hospital", key="hospital")
+    valor_hora = st.number_input("Valor da hora trabalhada (R$)", key="valor_hora")
+    produtividade = st.number_input("Valor da produtividade mensal (R$)", key="produtividade")
 
-Entrada de dados fixos (uma vez só)
+# Novo plantão
+st.subheader("Novo Plantão")
 
-with st.expander("Configurações iniciais (preencher apenas uma vez)"): nome = st.text_input("Nome do cirurgião", key="nome") hospital = st.text_input("Hospital", key="hospital") valor_hora = st.number_input("Valor da hora trabalhada (R$)", key="valor_hora") produtividade = st.number_input("Valor da produtividade mensal (R$)", key="produtividade")
+data = st.date_input("Data do plantão")
+horas = st.number_input("Quantidade de horas trabalhadas", min_value=1.0, step=0.5)
+horario = st.selectbox("Horário do plantão", ["07:00 - 13:00", "13:00 - 19:00", "07:00 - 19:00", "19:00 - 07:00"])
+local = st.selectbox("Local de trabalho", ["Ambulatório", "Centro Cirúrgico", "Diarismo"])
 
-Entrada de dados por plantão
+if st.button("Registrar plantão"):
+    novo = {
+        "Data": data,
+        "Horário": horario,
+        "Horas": horas,
+        "Local": local,
+        "Valor": horas * valor_hora
+    }
+    st.session_state.registros.append(novo)
+    st.success("Plantão registrado com sucesso!")
 
-st.subheader("Novo Plantão") data = st.date_input("Data do plantão") horario = st.selectbox("Horário do plantão", [ "07:00 - 13:00", "13:00 - 19:00", "07:00 - 19:00", "19:00 - 07:00" ]) local = st.selectbox("Local de trabalho", [ "Ambulatório", "Centro Cirúrgico", "Diarismo" ]) horas = st.number_input("Quantidade de horas trabalhadas", min_value=1.0, step=0.5)
+# Exibir registros e permitir exclusão
+if st.session_state.registros:
+    st.subheader("Registros do mês")
+    df = pd.DataFrame(st.session_state.registros)
 
-if st.button("Registrar plantão"): st.session_state.registros.append({ "Data": data.strftime("%d/%m/%Y"), "Horário": horario, "Local": local, "Horas": horas }) st.success("Plantão registrado com sucesso!")
+    for i, row in df.iterrows():
+        col1, col2 = st.columns([6, 1])
+        with col1:
+            st.markdown(f"{row['Data'].strftime('%d/%m/%Y')} ({row['Horário']}) - {row['Horas']}h | {row['Local']}")
+        with col2:
+            if st.button("🗑️", key=f"del_{i}"):
+                st.session_state.registros.pop(i)
+                st.experimental_rerun()
 
-Exibir registros e permitir exclusão
+    total_horas = df["Horas"].sum()
+    total_valor = df["Valor"].sum()
+    st.markdown(f"**Total do mês (sem produtividade):** R$ {total_valor:.2f}")
+    st.markdown(f"**Produtividade:** R$ {produtividade:.2f}")
+    st.markdown(f"**Total geral:** R$ {total_valor + produtividade:.2f}")
 
-if st.session_state.registros: st.subheader("Registros do mês") for i, reg in enumerate(st.session_state.registros): col1, col2, col3, col4, col5 = st.columns([2, 2, 2, 2, 1]) col1.write(reg["Data"]) col2.write(reg["Horário"]) col3.write(reg["Local"]) col4.write(f'{reg["Horas"]:.2f}h') if col5.button("❌", key=f"del_{i}"): st.session_state.registros.pop(i) st.experimental_rerun()
+    # Botão para gerar DOCX
+    if st.button("📄 Gerar relatório em Word"):
+        doc = Document()
+        doc.add_heading(f"Serviços {hospital} {nome} - {data.strftime('%B/%Y')}", level=1)
 
-# Calcular totais
-total_horas = sum(r["Horas"] for r in st.session_state.registros)
-total_valor = total_horas * valor_hora
-total_geral = total_valor + produtividade
+        for local_trabalho in df["Local"].unique():
+            doc.add_paragraph(f"\n*{local_trabalho}*", style="List Bullet")
 
-st.markdown(f"**Total de horas:** {total_horas:.2f}h")
-st.markdown(f"**Total (sem produtividade):** R$ {total_valor:.2f}")
-st.markdown(f"**Produtividade:** R$ {produtividade:.2f}")
-st.markdown(f"**Valor final:** R$ {total_geral:.2f}")
+            registros_local = df[df["Local"] == local_trabalho]
+            for _, r in registros_local.iterrows():
+                linha = f"{r['Data'].strftime('%d/%m/%Y')} ({r['Horário']}) - {int(r['Horas'])}h"
+                doc.add_paragraph(linha, style="List Bullet 2")
 
-# Gerar relatório de texto
-st.subheader("Gerar relatório final")
-if st.button("Gerar relatório"):
-    relatorio = f"Serviços {hospital} {nome} {datetime.now().strftime('%B/%Y')}\n\n"
-    locais = ["Ambulatório", "Centro Cirúrgico", "Diarismo"]
-    for loc in locais:
-        registros_locais = [r for r in st.session_state.registros if r["Local"] == loc]
-        if registros_locais:
-            relatorio += f"*{loc}*:\n\n"
-            for r in registros_locais:
-                relatorio += f"{r['Data']} ({r['Horário']}) - {r['Horas']:.0f}h\n"
-            total_loc = sum(r['Horas'] for r in registros_locais)
-            valor_loc = total_loc * valor_hora
-            relatorio += f"\nTotal: {total_loc:.0f} horas\n"
-            relatorio += f"Valor: {total_loc:.0f} X {valor_hora:.2f} = R$ {valor_loc:.2f}\n\n"
+            total_horas_local = registros_local["Horas"].sum()
+            total_valor_local = registros_local["Valor"].sum()
+            doc.add_paragraph(f"Total: {int(total_horas_local)} horas", style="Normal")
+            doc.add_paragraph(f"Valor: {int(total_horas_local)} X {valor_hora:.0f} = {total_valor_local:.2f}", style="Normal")
 
-    relatorio += f"Valor total: R$ {total_valor:.2f}\n"
-    relatorio += f"\nProdutividade\n{datetime.now().strftime('%B')}: R$ {produtividade:.2f}\n"
-    relatorio += f"\nValor final: R$ {total_geral:.2f}"
+        doc.add_paragraph(f"\nValor total: {total_valor:.2f}")
+        doc.add_paragraph(f"Produtividade: {produtividade:.2f}")
+        doc.add_paragraph(f"Valor final: {total_valor + produtividade:.2f}")
 
-    st.download_button("📄 Baixar relatório (.txt)", relatorio, file_name="relatorio_plantao.txt")
+        buffer = BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
 
-else: st.info("Ainda não há plantões registrados.")
-
+        st.download_button(
+            label="📥 Baixar Relatório Word",
+            data=buffer,
+            file_name=f"relatorio_{nome.lower().replace(' ', '_')}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+else:
+    st.info("Ainda não há plantões registrados.")
