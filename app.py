@@ -1,78 +1,80 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 
-st.set_page_config(page_title="Relatório de Cirurgias", layout="centered")
+st.set_page_config(page_title="Registro de Plantões", layout="centered")
 
-st.title("Registro de Cirurgias")
+st.title("📋 Registro de Plantões Cirúrgicos")
 
-# Campos de entrada
-nome_medico = st.text_input("Nome do médico")
+# Inicializa a sessão de estado para armazenar os plantões
+if "plantoes" not in st.session_state:
+    st.session_state.plantoes = []
+if "produtividade_mensal" not in st.session_state:
+    st.session_state.produtividade_mensal = 0.0
 
-# Inicializa o estado da sessão se não existir
-if "cirurgias" not in st.session_state:
-    st.session_state.cirurgias = []
+# Entrada de dados
+with st.form("formulario_plantao"):
+    col1, col2 = st.columns(2)
+    with col1:
+        data = st.date_input("Data", value=datetime.today())
+        local = st.selectbox("Local", ["Centro Cirúrgico", "Ambulatório", "Diarista"])
+        horario = st.selectbox("Horário", ["07h - 13h", "07h - 19h", "13h - 19h"])
+    with col2:
+        nome = st.text_input("Nome do cirurgião")
+        valor_hora = st.number_input("Valor da hora (R$)", min_value=0.0, format="%.2f")
+        produtividade_mensal = st.number_input("Produtividade mensal (R$)", min_value=0.0, format="%.2f")
 
-# Formulário para adicionar cirurgia
-with st.form(key="form_cirurgia"):
-    data = st.date_input("Data")
-    local = st.selectbox("Local", ["Ambulatório", "Centro Cirúrgico", "Diarismo"])
-    horario = st.selectbox("Horário", [
-        "07:00 - 19:00",
-        "19:00 - 07:00",
-        "07:00 - 13:00",
-        "13:00 - 19:00"
-    ])
-    horas = st.number_input("Quantidade de horas", min_value=1, max_value=24, step=1)
-    valor_hora = st.number_input("Valor da hora (R$)", min_value=0.0, step=10.0, value=100.0)
-    adicionar = st.form_submit_button("Adicionar plantão")
+    enviar = st.form_submit_button("Adicionar plantão")
 
-    if adicionar:
-        st.session_state.cirurgias.append({
+    if enviar:
+        horas_por_turno = {
+            "07h - 13h": 6,
+            "07h - 19h": 12,
+            "13h - 19h": 6
+        }
+        horas = horas_por_turno.get(horario, 0)
+        plantao = {
             "data": data.strftime("%d/%m/%Y"),
             "local": local,
+            "nome": nome,
             "horario": horario,
             "horas": horas,
             "valor_hora": valor_hora
-        })
+        }
+        st.session_state.plantoes.append(plantao)
+        st.session_state.produtividade_mensal = produtividade_mensal
 
-# Exibir tabela com botão de excluir
-if st.session_state.cirurgias:
-    st.subheader("Plantões registrados")
-    for i, cirurgia in enumerate(st.session_state.cirurgias):
-        col1, col2 = st.columns([10, 1])
-        with col1:
-            st.write(
-                f"📅 **{cirurgia['data']}** | 🏥 {cirurgia['local']} | 🕒 {cirurgia['horario']} "
-                f"| ⏱️ {cirurgia['horas']}h | 💰 R$ {cirurgia['valor_hora']}/h"
-            )
-        with col2:
-            if st.button("❌", key=f"del_{i}"):
-                st.session_state.cirurgias.pop(i)
-                st.experimental_rerun()
+# Lista de plantões registrados
+st.subheader("📌 Plantões registrados")
+for i, p in enumerate(st.session_state.plantoes):
+    col1, col2 = st.columns([10, 1])
+    with col1:
+        st.markdown(
+            f"- 📅 {p['data']} | 🏥 {p['local']} | 👨‍⚕️ {p['nome']} | 🕒 {p['horario']} | ⏱️ {p['horas']}h | 💰 R$ {p['valor_hora']:.2f}/h"
+        )
+    with col2:
+        if st.button("❌", key=f"delete_{i}"):
+            st.session_state.plantoes.pop(i)
+            st.experimental_rerun()
 
-# Gerar relatório
-if nome_medico and st.session_state.cirurgias:
-    if st.button("Gerar relatório"):
-        df = pd.DataFrame(st.session_state.cirurgias)
+# Geração do relatório
+if st.session_state.plantoes:
+    st.subheader("📄 Relatório final")
+    df = pd.DataFrame(st.session_state.plantoes)
+    relatorio = ""
 
-        st.subheader("📄 Relatório final (copiar e colar no Word ou WhatsApp)")
+    for local in df['local'].unique():
+        relatorio += f"\n📍 **{local.upper()}**\n"
+        df_local = df[df['local'] == local]
+        total_horas = 0
+        total_valor = 0
+        for _, row in df_local.iterrows():
+            valor_total = row['horas'] * row['valor_hora']
+            relatorio += f"- {row['data']} - {row['nome']} - {row['horario']} - {row['horas']}h - R$ {valor_total:.2f}\n"
+            total_horas += row['horas']
+            total_valor += valor_total
+        relatorio += f"**Total de horas:** {total_horas}h\n"
+        relatorio += f"**Total R$:** R$ {total_valor:.2f}\n"
 
-        relatorio = f"Relatório de plantões do Dr. {nome_medico}\n\n"
-
-        total_geral = 0
-        for local in df["local"].unique():
-            relatorio += f"Local: {local}\n"
-            df_local = df[df["local"] == local]
-            for _, row in df_local.iterrows():
-                valor_total = row["horas"] * row["valor_hora"]
-                relatorio += (
-                    f"- {row['data']} ({row['horario']}) — {row['horas']}h "
-                    f"x R$ {row['valor_hora']:.2f}/h = R$ {valor_total:.2f}\n"
-                )
-            subtotal = (df_local["horas"] * df_local["valor_hora"]).sum()
-            relatorio += f"Subtotal {local}: R$ {subtotal:.2f}\n\n"
-            total_geral += subtotal
-
-        relatorio += f"Total geral: R$ {total_geral:.2f}"
-
-        st.text_area("Copie abaixo:", relatorio, height=400)
+    relatorio += f"\n📌 **Produtividade mensal:** R$ {st.session_state.produtividade_mensal:.2f}"
+    st.text_area("Relatório gerado:", value=relatorio, height=300)
