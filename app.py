@@ -2,79 +2,77 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-st.set_page_config(page_title="Registro de Plantões", layout="centered")
+st.set_page_config(page_title="Registro de Plantões Cirúrgicos", layout="centered")
 
-st.title("📋 Registro de Plantões Cirúrgicos")
+st.markdown("# 📝 Registro de Plantões Cirúrgicos")
 
-# Inicializa a sessão de estado para armazenar os plantões
-if "plantoes" not in st.session_state:
-    st.session_state.plantoes = []
-if "produtividade_mensal" not in st.session_state:
-    st.session_state.produtividade_mensal = 0.0
+# Inicializa o estado da sessão
+if "registros" not in st.session_state:
+    st.session_state.registros = []
 
-# Entrada de dados
-with st.form("formulario_plantao"):
-    col1, col2 = st.columns(2)
-    with col1:
-        data = st.date_input("Data", value=datetime.today())
-        local = st.selectbox("Local", ["Centro Cirúrgico", "Ambulatório", "Diarista"])
-        horario = st.selectbox("Horário", ["07h - 13h", "07h - 19h", "13h - 19h"])
-    with col2:
-        nome = st.text_input("Nome do cirurgião")
-        valor_hora = st.number_input("Valor da hora (R$)", min_value=0.0, format="%.2f")
-        produtividade_mensal = st.number_input("Produtividade mensal (R$)", min_value=0.0, format="%.2f")
+# Formulário de registro
+with st.form("registro_form"):
+    data = st.date_input("Data", value=datetime.today())
+    nome = st.text_input("Nome do cirurgião", "Washington Guimarães Damasceno")
 
-    enviar = st.form_submit_button("Adicionar plantão")
+    local = st.selectbox("Local", ["Ambulatório", "Centro Cirúrgico", "Diarismo"])
 
-    if enviar:
-        horas_por_turno = {
-            "07h - 13h": 6,
-            "07h - 19h": 12,
-            "13h - 19h": 6
-        }
-        horas = horas_por_turno.get(horario, 0)
-        plantao = {
+    horario = st.selectbox("Horário", ["07h - 13h", "07h - 19h", "13h - 19h", "19h - 07h"])
+
+    horas_por_turno = {
+        "07h - 13h": 6,
+        "07h - 19h": 12,
+        "13h - 19h": 6,
+        "19h - 07h": 12
+    }
+    horas = horas_por_turno[horario]
+
+    valor_hora = st.number_input("Valor da hora (R$)", min_value=0.0, value=160.0, step=10.0)
+
+    produtividade_mensal = st.number_input("Produtividade mensal (R$)", min_value=0.0, value=0.0, step=100.0)
+
+    submitted = st.form_submit_button("Adicionar plantão")
+
+    if submitted:
+        st.session_state.registros.append({
             "data": data.strftime("%d/%m/%Y"),
             "local": local,
-            "nome": nome,
             "horario": horario,
             "horas": horas,
-            "valor_hora": valor_hora
-        }
-        st.session_state.plantoes.append(plantao)
-        st.session_state.produtividade_mensal = produtividade_mensal
+            "valor_hora": valor_hora,
+            "produtividade_mensal": produtividade_mensal
+        })
+        st.success("✅ Plantão registrado com sucesso!")
 
-# Lista de plantões registrados
-st.subheader("📌 Plantões registrados")
-for i, p in enumerate(st.session_state.plantoes):
-    col1, col2 = st.columns([10, 1])
-    with col1:
-        st.markdown(
-            f"- 📅 {p['data']} | 🏥 {p['local']} | 👨‍⚕️ {p['nome']} | 🕒 {p['horario']} | ⏱️ {p['horas']}h | 💰 R$ {p['valor_hora']:.2f}/h"
-        )
-    with col2:
-        if st.button("❌", key=f"delete_{i}"):
-            st.session_state.plantoes.pop(i)
-            st.experimental_rerun()
+# Exibição dos plantões
+if st.session_state.registros:
+    st.markdown("## 📌 Plantões registrados")
+    df = pd.DataFrame(st.session_state.registros)
 
-# Geração do relatório
-if st.session_state.plantoes:
-    st.subheader("📄 Relatório final")
-    df = pd.DataFrame(st.session_state.plantoes)
-    relatorio = ""
+    # Agrupar por local
+    for local in df["local"].unique():
+        st.markdown(f"### 📍 {local}")
+        df_local = df[df["local"] == local]
+        total_horas = df_local["horas"].sum()
+        total_valor = (df_local["horas"] * df_local["valor_hora"]).sum()
 
-    for local in df['local'].unique():
-        relatorio += f"\n📍 **{local.upper()}**\n"
-        df_local = df[df['local'] == local]
-        total_horas = 0
-        total_valor = 0
+        linhas = []
         for _, row in df_local.iterrows():
-            valor_total = row['horas'] * row['valor_hora']
-            relatorio += f"- {row['data']} - {row['nome']} - {row['horario']} - {row['horas']}h - R$ {valor_total:.2f}\n"
-            total_horas += row['horas']
-            total_valor += valor_total
-        relatorio += f"**Total de horas:** {total_horas}h\n"
-        relatorio += f"**Total R$:** R$ {total_valor:.2f}\n"
+            linha = f"- {row['data']} - {row['horario']} - {int(row['horas'])}h"
+            linhas.append(linha)
 
-    relatorio += f"\n📌 **Produtividade mensal:** R$ {st.session_state.produtividade_mensal:.2f}"
-    st.text_area("Relatório gerado:", value=relatorio, height=300)
+        st.markdown("\n".join(linhas))
+        st.markdown(f"**Total: {int(total_horas)} horas = R$ {total_valor:,.2f}**")
+
+    # Mostrar total geral + produtividade
+    total_geral_horas = df["horas"].sum()
+    total_geral_valor = (df["horas"] * df["valor_hora"]).sum()
+    total_produtividade = df["produtividade_mensal"].sum()
+    total_completo = total_geral_valor + total_produtividade
+
+    st.markdown("---")
+    st.markdown("### 🧾 Resumo final:")
+    st.markdown(f"**🕒 Total de horas trabalhadas:** {int(total_geral_horas)}h")
+    st.markdown(f"**💰 Valor pelos plantões:** R$ {total_geral_valor:,.2f}")
+    st.markdown(f"**📈 Produtividade mensal:** R$ {total_produtividade:,.2f}")
+    st.markdown(f"**🧮 Total geral:** R$ {total_completo:,.2f}")
