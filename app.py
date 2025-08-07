@@ -1,4 +1,4 @@
-import streamlit as st
+|'import streamlit as st
 import pandas as pd
 
 st.title("Registro de Cirurgias")
@@ -39,4 +39,4 @@ if st.session_state.registros:
     st.markdown(f"**Total recebido com plantões:** R$ {total_valor:.2f}")
     st.markdown(f"**Produtividade mensal:** R$ {produtividade:.2f}")
     st.markdown(f"**Total geral:** R$ {total_valor + produtividade:.2f}")
-Corrigindo erro de digitação 
+# Corrigindo erro de digitação 
