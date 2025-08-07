@@ -18,7 +18,10 @@ with st.expander("Configurações iniciais (preencher apenas uma vez)"):
 st.subheader("Novo Plantão")
 data = st.date_input("Data do plantão")
 horas = st.number_input("Quantidade de horas trabalhadas")
-horario = st.text_input("Horário do plantão (ex: 07h - 13h)")
+horario = st.selectbox(
+    "Horário do plantão",
+    ["07:00 - 13:00", "13:00 - 19:00", "07:00 - 19:00", "19:00 - 07:00"]
+)
 local = st.selectbox("Local de trabalho", ["Ambulatório", "Centro Cirúrgico", "Diarismo"])
 
 if st.button("Registrar plantão"):
